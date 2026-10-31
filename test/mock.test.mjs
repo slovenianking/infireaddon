@@ -92,9 +92,11 @@ const movie = await get('stream/movie/tt0133093.json');
 console.log(JSON.stringify(movie, null, 1));
 assert.equal(movie.streams.length, 1, 'Reloaded mora biti izločen');
 assert.equal(movie.streams[0].infoHash, HASH_MOVIE);
-// Passkey se zazna samodejno z usercp/rss strani (hitreje kot nalaganje .torrent);
-// ker mock strežnik ponuja usercp.php za vse prijavljene uporabnike, se uporabi ta pot.
-assert.ok(movie.streams[0].sources[0].includes('deadbeef00deadbeef00deadbeef00deadbeef0'), 'passkey samodejno zaznan brez ročnega vnosa');
+// Vsak film zdaj naloži svoj .torrent in uporabi NJEGOV pravi announce tracker (ne
+// splošni usercp/rss passkey), da tudi veliki/manj razširjeni filmi dobijo delujoč
+// tracker namesto naključnega/skupnega, ki je bil vzrok, da so veliki filmi (>10GB)
+// obtičali brez peerjev, majhni pa so naključno dobili pravega.
+assert.ok(movie.streams[0].sources[0].includes('secret123'), 'uporabljen pravi tracker iz lastnega .torrent filma');
 assert.match(movie.streams[0].title, /55/);
 assert.match(movie.streams[0].title, /SLO/);
 
@@ -121,17 +123,37 @@ assert.ok(dbg.searches[0].parsed.length);
 assert.ok(lastLoginBody.includes('csrf_token=tok-xyz'), 'CSRF žeton mora biti poslan nazaj ob prijavi');
 
 // Nova identiteta (drug username), da se ne uporabi cache prejšnjega odjemalca:
-// preveri samodejno zaznavo passkeya z usercp/rss strani, ne iz .torrent datoteke.
+// film vedno naloži svoj .torrent in uporabi njegov pravi announce tracker, usercp/rss
+// passkey ostane le fallback za primere, ko lastnega .torrenta ni mogoče dobiti.
 const cfg2 = encodeURIComponent(JSON.stringify({ username: 'u2', password: 'p' }));
 const movie2 = await (await worker.fetch(new Request(`https://w.example/${cfg2}/stream/movie/tt0133093.json`), env)).json();
-assert.ok(movie2.streams[0].sources[0].includes('deadbeef00deadbeef00deadbeef00deadbeef0'), 'passkey samodejno zaznan z usercp/rss strani');
+assert.ok(movie2.streams[0].sources[0].includes(PASSKEY), 'tracker iz lastnega .torrent ima prednost pred splošnim usercp/rss passkeyem');
 
-// Tretja identiteta: usercp/rss ne izda passkeya na nobeni strani - mora se zateči
-// k branju .torrent datoteke (prvotni mehanizem) in najti passkey tam.
+// Tretja identiteta: usercp/rss ne izda passkeya na nobeni strani, a film vseeno dobi
+// delujoč tracker neposredno iz svojega .torrenta (ta pot zdaj ni več odvisna od usercp).
 noPasskeyPage = true;
 const cfg3 = encodeURIComponent(JSON.stringify({ username: 'u3', password: 'p' }));
 const movie3 = await (await worker.fetch(new Request(`https://w.example/${cfg3}/stream/movie/tt0133093.json`), env)).json();
-assert.ok(movie3.streams[0].sources[0].includes(PASSKEY), 'brez usercp/rss passkeya pade nazaj na .torrent');
+assert.ok(movie3.streams[0].sources[0].includes(PASSKEY), 'brez usercp/rss passkeya tracker vseeno pride iz .torrenta');
+
+// Scenarij s slike iz prijave: ena iskalna pot (npr. /browse.php) vrne 404 za
+// nekatere serije/kombinacije parametrov, potem ko je bila predhodno zapomnjena kot
+// "delujoča" za drug naslov. Addon se mora vrniti na ostale nastavljene poti namesto
+// da trajno obtiči z napako "infire.si je vrnil 404 za /browse.php".
+const envMultiPath = {
+  INFIRE_URL: env.INFIRE_URL,
+  INFIRE_SEARCH_PATHS: '/browse.php?search={q}|/torrents.php?search={q}'
+};
+const cfg4 = encodeURIComponent(JSON.stringify({ username: 'u4', password: 'p' }));
+const get4 = async (p) => (await worker.fetch(new Request(`https://w.example/${cfg4}/${p}`), envMultiPath)).json();
+// Prvo iskanje: /browse.php ne obstaja na mock strežniku (404) -> mora pasti na /torrents.php.
+const movie4 = await get4('stream/movie/tt0133093.json');
+assert.ok(!/404/.test(movie4.streams[0]?.title || ''), 'ne sme obtičati na 404 iskalni poti, mora pasti na naslednjo');
+assert.equal(movie4.streams[0].infoHash, HASH_MOVIE);
+// Drugo, drugačno iskanje (serija) z istim clientom: /torrents.php je bil zapomnjen kot
+// delujoč, mora delovati tudi zanj, ne samo za film.
+const ep4 = await get4('stream/series/tt1111111:1:2.json');
+assert.equal(ep4.streams[0].infoHash, HASH_EP);
 
 console.log('OK');
 server.close();

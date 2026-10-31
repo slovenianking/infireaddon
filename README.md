@@ -57,6 +57,28 @@ trackerja, ne najde peerjev (zasebni tracker nima DHT) in obtiči na "Fetching t
 Od v1.2.0 addon za vsak `https://` tracker doda tudi `http://` različico istega URL-ja, da ima
 vsak odjemalec - tudi strožji - vsaj eno obliko, ki jo sprejme kot veljaven vir.
 
+### Veliki filmi (>10 GB) se niso naložili, majhni so (popravljeno v v1.3.0)
+Vzrok: addon je `.torrent` datoteko (in s tem pravi announce/tracker URL) prej nalagal
+samo za sezonske pakete in filme z več datotekami znotraj torrenta. Navaden film z eno
+datoteko sploh ni dobil lastnega trackerja - v `sources` je pristal kar prvi tracker, ki
+ga je addon naključno odkril pri katerem koli drugem torrentu v tisti zahtevi (ali splošen
+passkey-predlog). Ker infire.si nima DHT (zaseben tracker), to pri manj razširjenih/večjih
+torrentih pogosto pomeni napačen ali nedelujoč tracker - torrent engine ne najde nobenega
+peera in obtiči, medtem ko manjši/priljubljeni torrenti po naključju dobijo pravi tracker.
+
+Od v1.3.0 addon za **vsak** film naloži njegov lastni `.torrent` in uporabi natančno njegov
+announce URL v `sources`; splošni passkey ostane le fallback, če lastnega `.torrenta` ni
+mogoče naložiti.
+
+### Nekatere serije: "infire.si je vrnil 404 za /browse.php" (popravljeno v v1.3.0)
+Vzrok: ko je ena od poti v `INFIRE_SEARCH_PATHS` enkrat uspešno vrnila rezultate, se je
+addon je zapomnil kot edino pot za vsa nadaljnja iskanja v tej seji (6 ur predpomnjenja na
+istem Workerju). Če ta ista pot za drugo kombinacijo iskanja (npr. drugo sezono/epizodo)
+na strani vrne 404, iskanje ni imelo kam pasti nazaj, zato se je napaka pokazala kot vir.
+
+Od v1.3.0 napaka na zapomnjeni poti sprosti izbiro in poišče med vsemi nastavljenimi potmi
+naprej, namesto da trajno obtiči na eni, ki je ravno za to poizvedbo vrnila napako.
+
 ## Prilagoditev strani (`wrangler.jsonc` -> `vars`)
 Strukture infire.si ob pisanju ni bilo mogoče preveriti neposredno, zato so poti nastavljive:
 - `INFIRE_SEARCH_PATHS`: poti za iskanje, ločene z `|`, `{q}` je iskalni niz. Poskusijo se po vrsti.
