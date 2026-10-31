@@ -22,7 +22,7 @@ const clientCache = new Map(); // identiteta -> InfireClient (obdrži piškotek 
 
 const manifest = {
   id: 'com.infire.stremio',
-  version: '1.3.0',
+  version: '1.3.1',
   name: 'Infire',
   description:
     'Torrent viri iz infire.si (kot Torrentio): za vsak film ali serijo, ki jo odprete, poišče izdaje na vašem infire.si računu in jih ponudi kot vire. Z oznako slovenskih podnapisov (SLOSubs).',

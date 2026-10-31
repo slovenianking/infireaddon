@@ -241,11 +241,27 @@ export class InfireClient {
   }
 
   async login() {
-    if (this.manualCookie && !this.password) {
-      this.cookie = this.manualCookie;
-      return;
+    // Ročno vnesen piškotek ima vedno prednost, ko je veljaven - ne glede na to, ali je
+    // uporabnik poleg njega pustil tudi uporabniško ime/geslo. Prej je piškotek veljal
+    // samo, če gesla sploh ni bilo (`!this.password`), zato je uporabnik, ki je imel
+    // nastavljeno oboje (npr. ker je samodejna prijava sprva odpovedala in je ročno dodal
+    // piškotek, a ni izbrisal gesla), dobil NAPAKO PRIJAVE pri vsaki zahtevi: addon je
+    // ročni, delujoč piškotek popolnoma prezrl in poskušal (neuspešno) prijavo z geslom.
+    if (this.manualCookie) {
+      if (!this.password || (await this._verify(this.manualCookie))) {
+        this.cookie = this.manualCookie;
+        return;
+      }
+      // Piškotek je podan, a ni (več) veljaven in imamo tudi geslo - nadaljuj na
+      // samodejno prijavo spodaj namesto da takoj vržemo napako.
     }
-    if (!this.username || !this.password) throw new Error('Manjka uporabniško ime/geslo (ali piškotek) za infire.si.');
+    if (!this.username || !this.password) {
+      if (this.manualCookie) {
+        // Piškotek je bil podan, a ni veljaven, gesla pa ni - jasna, uporabna napaka.
+        throw new Error('Vnešen piškotek seje za infire.si ni (več) veljaven. Prijavite se v brskalniku in piškotek posodobite, ali pa vnesite uporabniško ime in geslo za samodejno prijavo.');
+      }
+      throw new Error('Manjka uporabniško ime/geslo (ali piškotek) za infire.si.');
+    }
     if (this.loginPromise) return this.loginPromise;
     this.loginPromise = (async () => {
       const log = (this.loginLog = []);

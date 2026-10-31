@@ -155,5 +155,16 @@ assert.equal(movie4.streams[0].infoHash, HASH_MOVIE);
 const ep4 = await get4('stream/series/tt1111111:1:2.json');
 assert.equal(ep4.streams[0].infoHash, HASH_EP);
 
+// Pravi vzrok uporabnikove težave: v nastavitvah pusti IZPOLNJENO uporabniško ime/geslo
+// IN ročni piškotek (npr. ker je sprva ročno dodal piškotek, nato pa ni izbrisal gesla).
+// Prej je addon v tem primeru piškotek popolnoma prezrl in poskušal prijavo z geslom -
+// če geslo ni bilo (več) pravilno ali je takelogin.php vrnil 404, je VSAKA zahteva vrnila
+// napako prijave, kar se je v Nuvio/Stremio kazalo kot prazen/napačen vir (in na strožjih
+// TV torrent engine-ih obtičalo na "Fetching torrent metadata", ker ni bilo pravega vira).
+const cfg5 = encodeURIComponent(JSON.stringify({ username: 'u5', password: 'napacno-geslo', cookie: 'uid=1; pass=zzz' }));
+const movie5 = await (await worker.fetch(new Request(`https://w.example/${cfg5}/stream/movie/tt0133093.json`), env)).json();
+assert.equal(movie5.streams[0].infoHash, HASH_MOVIE, 'veljaven ročni piškotek mora imeti prednost pred (napačnim) geslom');
+assert.ok(!/NAPAKA|napaka/i.test(movie5.streams[0].title || ''), 'ne sme javiti napake prijave, če je piškotek veljaven');
+
 console.log('OK');
 server.close();

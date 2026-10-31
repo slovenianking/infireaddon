@@ -79,6 +79,24 @@ na strani vrne 404, iskanje ni imelo kam pasti nazaj, zato se je napaka pokazala
 Od v1.3.0 napaka na zapomnjeni poti sprosti izbiro in poišče med vsemi nastavljenimi potmi
 naprej, namesto da trajno obtiči na eni, ki je ravno za to poizvedbo vrnila napako.
 
+### Nuvio na TV obtiči na "Fetching torrent metadata" za VSE filme/serije (popravljeno v v1.3.1)
+Vzrok: `/debug` je pokazal `NAPAKA: Prijava v infire.si ni uspela (POST /takelogin.php -> 404;
+POST /login.php -> 200)`. Uporabnik je imel v nastavitvah izpolnjeno TAKO uporabniško ime in
+geslo KOT ročni piškotek seje (najverjetneje ker je piškotek dodal, ko samodejna prijava sprva
+ni delovala, nato pa ni izbrisal gesla). Addon je piškotek upošteval samo, če gesla sploh ni
+bilo nastavljenega - ker je bilo geslo izpolnjeno, je addon piškotek povsem prezrl in poskušal
+samodejno prijavo z uporabniškim imenom/geslom, ki na tej namestitvi trackerja ne deluje
+(`takelogin.php` vrne 404). Posledica: VSAKA zahteva za vir je vrnila napako prijave namesto
+pravega torrent vira, kar se je v Nuvio na TV kazalo kot obtičanje brez delujočega vira.
+
+Od v1.3.1 ročno vnesen piškotek vedno prevlada, če je (še) veljaven, ne glede na to, ali je
+geslo tudi izpolnjeno. Če ročni piškotek ni (več) veljaven, addon pade nazaj na prijavo z
+uporabniškim imenom/geslom namesto da takoj odneha.
+
+**Če ste imeli to težavo:** v nastavitvah (`/configure`) lahko pustite piškotek, kot je, ali pa
+raje izbrišite polje piškotka, če želite, da se addon prijavlja samodejno z geslom (preverite
+najprej, ali `takelogin.php` na vaši namestitvi sploh deluje - glejte `/debug/<iskanje>`).
+
 ## Prilagoditev strani (`wrangler.jsonc` -> `vars`)
 Strukture infire.si ob pisanju ni bilo mogoče preveriti neposredno, zato so poti nastavljive:
 - `INFIRE_SEARCH_PATHS`: poti za iskanje, ločene z `|`, `{q}` je iskalni niz. Poskusijo se po vrsti.
