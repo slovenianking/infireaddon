@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Mora se ujemati z imenom projekta v Cloudflare (Workers & Pages -> Settings -> Build).
+  "name": "infireaddon",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  // Ikona (/icon.png) se streže kot statična datoteka, vse ostalo obdela Worker.
+  "assets": {
+    "directory": "./public"
+  },
+  "vars": {
+    "INFIRE_URL": "https://infire.si",
+    // Poti za iskanje in prijavo (ločene z |). {q} = iskalni niz. Poskusijo se po vrsti,
+    // delujoča se zapomni. Popravite, če se tracker razlikuje od standardne PHP postavitve.
+    "INFIRE_SEARCH_PATHS": "/torrents.php?search={q}|/torrents.php?search={q}&incldead=0|/browse.php?search={q}&incldead=0",
+    "INFIRE_LOGIN_PATH": "/takelogin.php"
+    // Neobvezno: fiksen announce URL, npr. "https://infire.si/announce.php?passkey={passkey}"
+    // (sicer se trackerji preberejo iz prvega .torrent, ki ga addon naloži).
+    // "INFIRE_ANNOUNCE": ""
+  },
+  "observability": {
+    "enabled": true
+  }
+}
