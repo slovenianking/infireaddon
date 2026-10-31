@@ -13,6 +13,7 @@ Uporablja vedno vaše lastne infire.si poverilnice. Gre za zasebni tracker, zato
 4. Filtriranje po naslovu/letu/SxxEyy, razvrščanje po ločljivosti in seederjih.
 5. Sezonski paketi: naloži se `.torrent`, izbere se `fileIdx` prave epizode (največ 3 paketi na zahtevo).
 6. **Samodejna zaznava passkeya (PID)**: addon po prijavi sam preišče znane strani (usercp/profil/RSS) za passkey; če ga ne najde tam, ga prebere iz prvega naloženega `.torrent` trackerja. Ročni vnos passkeya v nastavitvah ni potreben, je pa še vedno na voljo kot ročni override.
+7. Vsak tracker URL se v `sources` pošlje v **obeh oblikah**, `https://` in `http://` (glej spodaj *"Android/TV obtiči na 'Fetching torrent metadata'"*).
 
 Predvajanje je **direktni torrent** (Stremio streaming server / Nuvio torrent podpora), ne debrid.
 
@@ -44,6 +45,17 @@ Addon je brezstanjski HTTP endpoint (Cloudflare Worker), zato deluje enako na vs
 - **PC/Mac (Stremio)**: klik na NAMESTI na strani `/configure` odpre Stremio neposredno.
 - **TV brez tipkovnice / brez `stremio://` podpore**: stran `/configure` po ~2 sekundah brez zaznane menjave aplikacije sama pokaže gumb "Kopiraj povezavo addona" - povezavo prenesete na TV (npr. prek beležke v telefonu ali ročnega vnosa) in jo prilepite v Nuvio/Stremio "Add addon by URL".
 - Odgovori imajo eksplicitne `Cache-Control` glave, da TV odjemalci (ki pogosteje agresivno cachajo) ne obtičijo na starih rezultatih po spremembi nastavitev.
+
+### Android/TV obtiči na "Fetching torrent metadata", na PC naloži hitro
+Vzrok: addon je announce (tracker) URL v `sources` pošiljal samo v obliki `tracker:https://...`.
+Po [uradni Stremio specifikaciji](https://stremio.github.io/stremio-addon-sdk/api/responses/stream.html)
+je veljaven protokol v `sources` samo `http` ali `udp` - `https` ni del specifikacije. Stremio-core
+na PC je pri tem prizanesljiv in `https://` vseeno sprejme, medtem ko ga strožji torrent engine na
+nekaterih Android/TV izvedbah Nuvio tiho zavrže - tak odjemalec zato nikoli ne dobi veljavnega
+trackerja, ne najde peerjev (zasebni tracker nima DHT) in obtiči na "Fetching torrent metadata".
+
+Od v1.2.0 addon za vsak `https://` tracker doda tudi `http://` različico istega URL-ja, da ima
+vsak odjemalec - tudi strožji - vsaj eno obliko, ki jo sprejme kot veljaven vir.
 
 ## Prilagoditev strani (`wrangler.jsonc` -> `vars`)
 Strukture infire.si ob pisanju ni bilo mogoče preveriti neposredno, zato so poti nastavljive:

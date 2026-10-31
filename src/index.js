@@ -15,7 +15,7 @@ const clientCache = new Map(); // identiteta -> InfireClient (obdrži piškotek 
 
 const manifest = {
   id: 'com.infire.stremio',
-  version: '1.1.0',
+  version: '1.2.0',
   name: 'Infire',
   description:
     'Torrent viri iz infire.si (kot Torrentio): za vsak film ali serijo, ki jo odprete, poišče izdaje na vašem infire.si računu in jih ponudi kot vire. Z oznako slovenskih podnapisov (SLOSubs).',
@@ -125,8 +125,30 @@ function cfgInt(v, d) {
   return isNaN(n) ? d : n;
 }
 
+// Stremio/Nuvio pričakuje `sources` vnose v obliki `tracker:<protocol>://<host>:<port>`,
+// kjer je <protocol> po specifikaciji samo `http` ali `udp` (ne `https`). Namizni
+// Stremio-core je pri tem precej prizanesljiv in `https://` sprejme kot karkoli, zato
+// na PC-ju deluje tudi s HTTPS announce URL-jem. Nekateri bolj strogi torrent engine-i
+// na Android/TV izvedbah Nuvio pa `tracker:https://...` zavržejo kot neveljaven vir in
+// posledično ne najdejo nobenega peera (obtiči na "Fetching torrent metadata").
+// Zato za vsak HTTPS announce dodamo tudi http:// različico istega URL-ja: BitTorrent
+// tracker protokol (announce.php) na zasebnih trackerjih tipično odgovarja tudi na
+// navaden HTTP, TLS je tam le za preprečevanje "sniffanja" v brskalniku, ne del
+// samega tracker protokola. S tem ima vsak odjemalec vsaj eno obliko, ki jo sprejme.
 function magnetSources(hash, trackers) {
-  return trackers.map((t) => `tracker:${t}`);
+  const out = [];
+  const seen = new Set();
+  const add = (url) => {
+    if (!seen.has(url)) {
+      seen.add(url);
+      out.push(`tracker:${url}`);
+    }
+  };
+  for (const t of trackers) {
+    add(t);
+    if (/^https:\/\//i.test(t)) add(t.replace(/^https:\/\//i, 'http://'));
+  }
+  return out;
 }
 
 async function collect(client, req, config) {

@@ -103,6 +103,12 @@ console.log(JSON.stringify(ep, null, 1));
 assert.equal(ep.streams[0].infoHash, HASH_EP);
 const pack = ep.streams.find((s) => s.infoHash === HASH_PACK);
 assert.equal(pack.fileIdx, 1, 'fileIdx epizode v paketu');
+// Za vsak https:// tracker mora addon ponuditi tudi http:// različico, ker nekateri
+// torrent engine-i na Android/TV strogo upoštevajo specifikacijo (tracker:http:// ali
+// tracker:udp://) in https:// vir tiho zavržejo - to je bilo vzrok, da je predvajanje
+// na telefonu/TV obtičalo na "Fetching torrent metadata" kljub hitremu delovanju na PC.
+assert.ok(pack.sources.includes('tracker:https://infire.si/announce.php?passkey=secret123'));
+assert.ok(pack.sources.includes('tracker:http://infire.si/announce.php?passkey=secret123'), 'http:// dvojnik mora biti dodan za strožje torrent engine-e');
 
 const bad = await (await worker.fetch(new Request('https://w.example/stream/movie/tt1.json'), env)).json();
 assert.match(bad.streams[0].title, /uporabni/);
