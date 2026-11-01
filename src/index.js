@@ -362,7 +362,7 @@ async function route(request, env) {
   try {
     if (resource === 'debug') {
       const client = getClient(ctx.config, ctx.env);
-      return json(await client.debug(segs[1] || 'matrix'));
+      return json(await client.debug(segs[1] || 'matrix', url.searchParams.get('row')));
     }
     if (resource === 'stream') return json(await handleStream(ctx, segs[1], stripJson(segs[2])), 200, 'public, max-age=60, stale-while-revalidate=120');
     return text('Not found', 404);

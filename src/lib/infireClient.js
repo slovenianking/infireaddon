@@ -373,7 +373,7 @@ export class InfireClient {
   }
 
   /** Diagnostika: vrne korake prijave in odgovor vsake iskalne poti (za /debug/<iskanje>). */
-  async debug(query) {
+  async debug(query, rowMatch) {
     const out = { login: null, searches: [] };
     try {
       await this.login();
@@ -399,15 +399,30 @@ export class InfireClient {
             }
           }
         }
-        out.searches.push({
+        const entry = {
           path: p,
           status: res.status,
           location: res.headers.get('location'),
           title: (/<title>([^<]*)/i.exec(html) || [])[1] || null,
-          parsed: html ? parseResults(html).slice(0, 3) : [],
+          parsed: html ? parseResults(html) : [],
           detailsLinks: (html.match(/details\.php\?id=[0-9a-f]{40}/gi) || []).length,
           snippet: html.slice(0, 600)
-        });
+        };
+        // Diagnostika za posamezno vrstico (npr. ?row=Kitsune): surov HTML okoli prve
+        // pojavitve niza, da je videti natančno zaporedje stolpcev (freeleech ikona,
+        // Com. steber ipd.), ki jih parseResults morda napačno prešteje kot S/L.
+        if (rowMatch) {
+          const idx = html.indexOf(rowMatch);
+          if (idx >= 0) {
+            const start = Math.max(0, html.lastIndexOf('<tr', idx));
+            let end = html.indexOf('<tr', idx + rowMatch.length);
+            end = end > 0 ? end : Math.min(html.length, idx + 2000);
+            entry.rowHtml = html.slice(start, end);
+          } else {
+            entry.rowHtml = `(niz "${rowMatch}" ni najden na tej strani)`;
+          }
+        }
+        out.searches.push(entry);
       } catch (err) {
         out.searches.push({ path: p, error: err.message });
       }
