@@ -199,7 +199,7 @@ export class InfireClient {
     this.cookie = cookie || '';
     this.passkey = passkey || '';
     this.announceTemplate = announce || '';
-    this.searchPaths = searchPaths && searchPaths.length ? searchPaths : ['/torrents.php?search={q}', '/torrents.php?search={q}&incldead=0', '/browse.php?search={q}&incldead=0'];
+    this.searchPaths = searchPaths && searchPaths.length ? searchPaths : ['/torrents.php?search={q}', '/torrents.php?search={q}&incldead=0', '/search.php?search={q}&incldead=0'];
     this.loginPath = loginPath || '/takelogin.php';
     this.workingSearchPath = null;
     this.loginPromise = null;
@@ -347,7 +347,7 @@ export class InfireClient {
     // odpove (npr. 404 na tej strani za to kombinacijo parametrov - znano pri nekaterih
     // sezona/epizoda iskanjih), se NE sme obtičati: pade nazaj na vse ostale poti, sicer
     // bi ena pokvarjena pot trajno blokirala iskanje za vse naslednje zahteve (glej README
-    // #2 - serije z napako "infire.si je vrnil 404 za /browse.php").
+    // #2 - serije z napako "infire.si je vrnil 404 za /search.php").
     const rest = this.searchPaths.filter((p) => p !== this.workingSearchPath);
     const paths = this.workingSearchPath ? [this.workingSearchPath, ...rest] : this.searchPaths;
     let lastError = null;

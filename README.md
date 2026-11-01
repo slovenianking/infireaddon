@@ -9,7 +9,7 @@ Uporablja vedno vaše lastne infire.si poverilnice. Gre za zasebni tracker, zato
 ## Kako deluje
 1. IMDb id -> naslov + leto (Cinemeta).
 2. **Samodejna prijava** na infire.si (`takelogin.php`, z avtomatskim prepisom skritih polj/CSRF žetona iz obrazca) - piškotek seje se zapomni v Workerju in se sam obnovi, ko poteče. Ročnega vnosa piškotka ni treba, razen če avtomatska prijava odpove (npr. captcha).
-3. Iskanje (`browse.php?search=`), infohash se prebere iz `details.php?id=<40 hex>`.
+3. Iskanje (`torrents.php?search=`, s fallbackom na `search.php?search=`), infohash se prebere iz `details.php?id=<40 hex>`.
 4. Filtriranje po naslovu/letu/SxxEyy, razvrščanje po ločljivosti in seederjih.
 5. Sezonski paketi: naloži se `.torrent`, izbere se `fileIdx` prave epizode (največ 3 paketi na zahtevo).
 6. **Samodejna zaznava passkeya (PID)**: addon po prijavi sam preišče znane strani (usercp/profil/RSS) za passkey; če ga ne najde tam, ga prebere iz prvega naloženega `.torrent` trackerja. Ročni vnos passkeya v nastavitvah ni potreben, je pa še vedno na voljo kot ročni override.

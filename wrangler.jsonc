@@ -13,7 +13,7 @@
     "INFIRE_URL": "https://infire.si",
     // Poti za iskanje in prijavo (ločene z |). {q} = iskalni niz. Poskusijo se po vrsti,
     // delujoča se zapomni. Popravite, če se tracker razlikuje od standardne PHP postavitve.
-    "INFIRE_SEARCH_PATHS": "/torrents.php?search={q}|/torrents.php?search={q}&incldead=0|/browse.php?search={q}&incldead=0",
+    "INFIRE_SEARCH_PATHS": "/torrents.php?search={q}|/torrents.php?search={q}&incldead=0|/search.php?search={q}&incldead=0",
     "INFIRE_LOGIN_PATH": "/takelogin.php"
     // Neobvezno: fiksen announce URL, npr. "https://infire.si/announce.php?passkey={passkey}"
     // (sicer se trackerji preberejo iz prvega .torrent, ki ga addon naloži).
