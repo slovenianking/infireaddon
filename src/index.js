@@ -161,22 +161,24 @@ function magnetSources(hash, trackers) {
 async function collect(client, req, config) {
   const queries = buildQueries(req);
   const found = new Map();
-  for (const q of queries) {
-    let results = [];
-    try {
-      results = await client.search(q);
-    } catch (err) {
-      if (!found.size && q === queries[queries.length - 1]) throw err;
-      continue;
+  // Vse poizvedbe (npr. pri seriji "S01E02" IN sezonski paket "S01") gredo vzporedno
+  // namesto ena za drugo - vsaka poizvedba je lasten HTTP klic na infire.si, zaporedno
+  // izvajanje je bil glavni vzrok, da je iskanje trajalo dolgo preden se je sploh
+  // začelo nalaganje .torrent datotek in prikaz sejalcev.
+  const settled = await Promise.allSettled(queries.map((q) => client.search(q)));
+  let lastError = null;
+  settled.forEach((res, i) => {
+    if (res.status === 'rejected') {
+      lastError = res.reason;
+      return;
     }
-    for (const r of results) {
+    for (const r of res.value) {
       if (found.has(r.hash)) continue;
       const m = matchRelease(r.name, req);
       if (m) found.set(r.hash, { ...r, kind: m.kind, q: parseQuality(r.name) });
     }
-    // Film: ena poizvedba zadošča; serija: nadaljuj na sezonske pakete, če epizod ni dovolj.
-    if (req.type === 'movie' && found.size) break;
-  }
+  });
+  if (!found.size && lastError) throw lastError;
 
   let items = [...found.values()];
   const minSeeders = cfgInt(config.minSeeders, 0);
@@ -226,36 +228,57 @@ async function handleStream(ctx, type, id) {
   if (!items.length) return { streams: [] };
 
   // Trackerji (passkey) - iz nastavitev ali iz prvega .torrent, kot splošen fallback.
+  // ensureTrackers() se poganja VZPOREDNO z lastnimi .torrent nalaganji spodaj (ne čakamo
+  // nanj posebej): če je passkey že znan (nastavitve ali zapomnjen iz prejšnje zahteve),
+  // getTrackers() takoj vrne rezultat in ensurePasskey() sploh ne naredi omrežne zahteve.
+  const trackersReady = client.ensureTrackers(items, torrentCache);
+
+  // Omeji, koliko itemov sploh dobi lasten .torrent lookup (podzahtevki so omejeni),
+  // a vse te lookupe zaženi VZPOREDNO namesto enega za drugim - to je bil glavni vzrok
+  // dolgega čakanja, preden Stremio/Nuvio sploh dobi sejalce in vire.
   let packLookups = 0;
   let movieLookups = 0;
-  const streams = [];
-  await client.ensureTrackers(items, torrentCache);
-  const fallbackTrackers = client.getTrackers();
-  for (const item of items) {
-    let fileIdx;
-    let torrentName = item.name;
-    // Vsak torrent lahko ima svoj announce URL - pravega dobimo le iz NJEGOVEGA .torrenta.
-    // Deljeni/splošni tracker je samo fallback, če lastnega ni mogoče naložiti.
-    let itemTrackers = null;
+  const plan = items.map((item) => {
     const isPack = item.kind === 'pack';
     const needsTorrent = isPack ? packLookups < MAX_PACK_LOOKUPS : movieLookups < MAX_MOVIE_TORRENT_LOOKUPS;
     if (needsTorrent) {
-      try {
-        if (isPack) packLookups++;
-        else movieLookups++;
-        const parsed = await torrentCache.getOrLoad(`${client.identity}:${item.hash}`, () => client.fetchTorrent(item));
-        if (parsed.trackers && parsed.trackers.length) itemTrackers = parsed.trackers;
-        if (isPack) fileIdx = pickFileIdx(parsed.files, req);
-        else if (parsed.files.length > 1) fileIdx = pickFileIdx(parsed.files, req);
-      } catch (_) {
-        // Brez .torrent ostane splošni fallback tracker; paketa brez fileIdx ne ponudimo
-        // (bi predvajal napačno datoteko), film pa še vedno ponudimo s fallback trackerjem.
-        if (isPack) continue;
-      }
+      if (isPack) packLookups++;
+      else movieLookups++;
     } else if (isPack) {
-      continue; // presežena omejitev podzahtevkov za pakete
+      return { item, isPack, skip: true }; // presežena omejitev podzahtevkov za pakete
     }
+    return { item, isPack, needsTorrent };
+  });
 
+  await trackersReady;
+  const fallbackTrackers = client.getTrackers();
+
+  const results = await Promise.all(
+    plan.map(async ({ item, isPack, needsTorrent, skip }) => {
+      if (skip) return null;
+      let fileIdx;
+      let itemTrackers = null;
+      if (needsTorrent) {
+        try {
+          const parsed = await torrentCache.getOrLoad(`${client.identity}:${item.hash}`, () => client.fetchTorrent(item));
+          if (parsed.trackers && parsed.trackers.length) itemTrackers = parsed.trackers;
+          if (isPack) fileIdx = pickFileIdx(parsed.files, req);
+          else if (parsed.files.length > 1) fileIdx = pickFileIdx(parsed.files, req);
+        } catch (_) {
+          // Brez .torrent ostane splošni fallback tracker; paketa brez fileIdx ne ponudimo
+          // (bi predvajal napačno datoteko), film pa še vedno ponudimo s fallback trackerjem.
+          if (isPack) return null;
+        }
+      }
+      return { item, isPack, fileIdx, itemTrackers };
+    })
+  );
+
+  const streams = [];
+  for (const res of results) {
+    if (!res) continue;
+    const { item, isPack, fileIdx, itemTrackers } = res;
+    const torrentName = item.name;
     const trackers = itemTrackers && itemTrackers.length ? itemTrackers : fallbackTrackers;
     const bits = [item.q.label, ...item.q.tags].join(' ');
     const lines = [torrentName, `👤 ${item.seeders}  💾 ${formatSize(item.size)}  ⚙️ infire.si${isPack ? '  📦 paket' : ''}`];

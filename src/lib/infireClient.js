@@ -467,12 +467,15 @@ export class InfireClient {
     // kar prihrani nalaganje .torrent datotek samo za ta namen.
     if (!this.passkey) await this.ensurePasskey();
     if (this.getTrackers().length) return;
-    for (const item of items.slice(0, 3)) {
-      try {
-        await cache.getOrLoad(`${this.identity}:${item.hash}`, () => this.fetchTorrent(item));
-        if (this.getTrackers().length) return;
-      } catch (_) {}
-    }
+    // Vzporedno namesto enega za drugim - cache.getOrLoad ima zaščito pred podvojenimi
+    // sočasnimi zahtevami za isti hash (deli isti "in-flight" promise z glavno zanko
+    // v index.js, ki te iste prve iteme itak nalaga za svoje potrebe), zato to ne naredi
+    // dodatnih omrežnih zahtev, le ne čaka nanje eno za drugo.
+    await Promise.all(
+      items.slice(0, 3).map((item) =>
+        cache.getOrLoad(`${this.identity}:${item.hash}`, () => this.fetchTorrent(item)).catch(() => null)
+      )
+    );
   }
 
   /**
