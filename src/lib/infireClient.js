@@ -402,13 +402,28 @@ export class InfireClient {
         const res = await this._fetch(url, { headers: { Cookie: this.cookie } });
         const html = res.status === 200 ? await res.text() : '';
         if (html && !out.torrent) {
-          const first = parseResults(html)[0];
-          if (first) {
+          const results = parseResults(html);
+          // Če je podan ?row=, uporabi TA rezultat (po imenu) za diagnostiko .torrenta,
+          // ne kar prvega na strani - da lahko ciljano preverimo npr. 1080p izdajo, ne
+          // naključno tisto, ki je slučajno prva v seznamu rezultatov.
+          const target = (rowMatch && results.find((r) => r.name.includes(rowMatch))) || results[0];
+          if (target) {
             try {
-              const t = await this.fetchTorrent(first);
-              out.torrent = { ok: true, trackers: t.trackers.map((x) => x.replace(/passkey=[^&]+/i, 'passkey=***')), files: t.files.length };
+              const t = await this.fetchTorrent(target);
+              out.torrent = {
+                ok: true,
+                name: target.name,
+                trackers: t.trackers.map((x) => x.replace(/(passkey|pid)=[^&]+/i, '$1=***')),
+                isPrivate: t.isPrivate,
+                files: t.files.length,
+                // Vse datoteke v torrentu (pot, velikost, idx) - da je razvidno, ali
+                // addon izbere pravo (video) datoteko kot fileIdx, in ali so morda
+                // v torrentu "padding"/extra datoteke, ki bi lahko zmedle šibkejši
+                // torrent engine (npr. izbor napačnega fileIdx na nekaterih napravah).
+                fileList: t.files.map((f) => ({ idx: f.idx, path: f.path, size: f.size }))
+              };
             } catch (err) {
-              out.torrent = { ok: false, error: err.message, downloadHref: first.downloadHref };
+              out.torrent = { ok: false, error: err.message, downloadHref: target.downloadHref };
             }
           }
         }
