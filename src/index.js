@@ -258,26 +258,39 @@ async function handleStream(ctx, type, id) {
       if (skip) return null;
       let fileIdx;
       let itemTrackers = null;
+      let fileName = null; // ime DEJANSKE video datoteke znotraj torrenta (glej spodaj)
       if (needsTorrent) {
         try {
           const parsed = await torrentCache.getOrLoad(`${client.identity}:${item.hash}`, () => client.fetchTorrent(item));
           if (parsed.trackers && parsed.trackers.length) itemTrackers = parsed.trackers;
           if (isPack) fileIdx = pickFileIdx(parsed.files, req);
           else if (parsed.files.length > 1) fileIdx = pickFileIdx(parsed.files, req);
+          // Pri multi-file torrentu (video + .srt/.nfo poleg njega, pogosto pri HD
+          // izdajah) je ime celotnega torrenta (npr. "...-Kitsune", brez .mkv pripone)
+          // DRUGAČNO od imena dejanske video datoteke znotraj njega (npr. "...-Kitsune.mkv").
+          // Stremio/Nuvio torrent engine uporablja behaviorHints.filename (skupaj s
+          // fileIdx) za ujemanje prave datoteke v torrentu - napačno/manjkajoče ime tu je
+          // znan vzrok, da strožji (predvsem Android/TV) torrent engine ne najde prave
+          // datoteke in obtiči na "Fetching torrent metadata" / 0 sejalcev kljub temu da
+          // tracker peers vrača. Pri enodatotečnih (SD) torrentih tega problema ni, ker
+          // je edina datoteka v torrentu itak že prava.
+          if (fileIdx !== undefined && parsed.files[fileIdx]) {
+            fileName = parsed.files[fileIdx].path.split('/').pop();
+          }
         } catch (_) {
           // Brez .torrent ostane splošni fallback tracker; paketa brez fileIdx ne ponudimo
           // (bi predvajal napačno datoteko), film pa še vedno ponudimo s fallback trackerjem.
           if (isPack) return null;
         }
       }
-      return { item, isPack, fileIdx, itemTrackers };
+      return { item, isPack, fileIdx, itemTrackers, fileName };
     })
   );
 
   const streams = [];
   for (const res of results) {
     if (!res) continue;
-    const { item, isPack, fileIdx, itemTrackers } = res;
+    const { item, isPack, fileIdx, itemTrackers, fileName } = res;
     const torrentName = item.name;
     const trackers = itemTrackers && itemTrackers.length ? itemTrackers : fallbackTrackers;
     const bits = [item.q.label, ...item.q.tags].join(' ');
@@ -293,7 +306,9 @@ async function handleStream(ctx, type, id) {
       sources: magnetSources(item.hash, trackers),
       behaviorHints: {
         bingeGroup: `infire-${item.q.label}-${item.q.tags[0] || ''}`,
-        filename: torrentName
+        // Ime DEJANSKE video datoteke znotraj torrenta (ko je znano), ne ime torrenta
+        // samega - glej komentar zgoraj, kjer se fileName izračuna.
+        filename: fileName || torrentName
       }
     });
   }
