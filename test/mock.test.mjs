@@ -2,6 +2,41 @@
 import http from 'node:http';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
+import { parseResults } from '../src/lib/infireClient.js';
+
+// Regresijski test za pravo vrstico s strani (prijavljen primer: addon je za "Animals"
+// 1080p prikazoval 0/1 sejalcev namesto dejanskih 87, ker je stara "zadnji dve števili v
+// vrstici" hevristika pobrala leechers+zgodovino namesto seeders+leechers - glej S/L/C
+// stolpce kot <span class="tx-success/tx-danger/tx-warning"> spodaj). Ta HTML je dobeseden
+// `rowHtml` izsek iz /debug?row=Kitsune na pravem infire.si.
+const REAL_ROW_HTML = `<tr>
+<td class='tx-center tx-13 tp-first'>
+        <input type="checkbox" class="tp-check" aria-label="Izberi torrent"
+           data-hash="6e81106f539872becc2d68528208d4d4cf503f18" data-size="4574113147" data-factor="1"
+           data-slot="0" data-file="Animals.2026.SLO.CRO.Subs.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-Kitsune">
+        <img src='https://i.postimg.cc/7ZWtPmJH/x.jpg' width='40' height='50'>
+</td>
+<td class='tx-13'>
+    <a href='details.php?id=6e81106f539872becc2d68528208d4d4cf503f18' title='Podrobnosti za: Animals.2026.SLO.CRO.Subs.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-Kitsune' style='color:#8e8fba;font-size:11pt;' class='tx-inverse tx-medium d-block'> Animals.2026.SLO.CRO.Subs.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-Kitsune</a>
+</td>
+<td class='valign-middle tx-center'>
+    <a href='download.php?id=6e81106f539872becc2d68528208d4d4cf503f18&amp;f=Animals.2026.SLO.CRO.Subs.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-Kitsune.torrent'>[DL]</a>
+</td>
+    <td class='valign-middle tx-center'>---</td>
+            <td class='valign-middle tx-center'><i class='fas fa-comment-lines'></i> ---</td>
+<td class='valign-middle tx-center'><img src='images/fls_locked.png' border='0'  title='Zaklenjeno' /></td>
+<td class='valign-middle tx-center'>12/10/2026<br />03:37:21</td>
+<td class='valign-middle tx-center'>4.26 GiB</td>
+<td class='valign-middle tx-center'><a href='peers.php?id=6e81106f539872becc2d68528208d4d4cf503f18'><span class="tx-success">87</span></a></td>
+<td class='valign-middle tx-center'><a href='peers.php?id=6e81106f539872becc2d68528208d4d4cf503f18'><span class="tx-danger">1</span></a></td>
+<td class='valign-middle tx-center'><a href='torrent_history.php?id=6e81106f539872becc2d68528208d4d4cf503f18'><span class="tx-warning">337</span></a></td>
+</tr>`;
+
+{
+  const [r] = parseResults(REAL_ROW_HTML);
+  assert.equal(r.seeders, 87, 'pravi S/L stolpec (tx-success) se ne sme zamenjati z zgodovino/komentarji (337) ali datumom');
+  assert.equal(r.leechers, 1, 'leechers mora priti iz tx-danger, ne iz zgodovine/komentarjev stolpca');
+}
 
 const HASH_MOVIE = 'a'.repeat(40);
 const HASH_MOVIE_OTHER = 'b'.repeat(40);
@@ -15,7 +50,24 @@ function torrent(files, name) {
   return Buffer.from(`d8:announce${bstr('https://infire.si/announce.php?passkey=' + PASSKEY)}4:infod5:filesl${fl}e4:name${bstr(name)}12:piece lengthi16384e7:privatei1eee`);
 }
 
-const row = (hash, name, size, s, l) => `<tr><td><img src="x.jpg"></td><td><a href="details.php?id=${hash}" title="${name}">${name}</a><br><a href="download.php?id=${hash}">DL</a></td><td>Size: ${size}</td><td><b>12</b></td><td><b>${s}</b></td><td><b>${l}</b></td></tr>`;
+// Posnema dejansko postavitev vrstice na infire.si (glej README/prijavljen primer
+// "Animals" 1080p): Com. in Freeleech stolpca sta pogosto "---" oz. slika brez števila,
+// DATUM dodajanja ima svoje številke (dan/mesec/leto, ure:minute), nato Velikost, nato
+// S/L kot <span class="tx-success">/<span class="tx-danger"> znotraj <a href="peers.php?...">,
+// na koncu še "C" (zgodovina/komentarji) kot <span class="tx-warning">. Namenoma vsebuje
+// VEČ dodatnih golih števil kot stari poenostavljeni mock, da test dejansko preveri, da
+// parser pravih S/L ne zamenja z datumom ali zgodovino/komentarji.
+const row = (hash, name, size, s, l, comments = '---') =>
+  `<tr><td><img src="x.jpg"></td>` +
+  `<td><a href="details.php?id=${hash}" title="${name}">${name}</a><br><a href="download.php?id=${hash}">DL</a></td>` +
+  `<td class='valign-middle tx-center'>---</td>` + // Com.
+  `<td class='valign-middle tx-center'>${comments}</td>` + // dodaten stolpec s komentarji/oznako
+  `<td class='valign-middle tx-center'>01/02/2026<br />03:04:05</td>` + // Added (vsebuje gola števila!)
+  `<td>Size: ${size}</td>` +
+  `<td class='valign-middle tx-center'><a href='peers.php?id=${hash}'><span class="tx-success">${s}</span></a></td>` +
+  `<td class='valign-middle tx-center'><a href='peers.php?id=${hash}'><span class="tx-danger">${l}</span></a></td>` +
+  `<td class='valign-middle tx-center'><a href='torrent_history.php?id=${hash}'><span class="tx-warning">999</span></a></td>` +
+  `</tr>`;
 
 let lastLoginBody = '';
 let noPasskeyPage = false;

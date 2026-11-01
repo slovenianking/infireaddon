@@ -91,23 +91,36 @@ export function parseResults(html) {
     const text = stripTags(chunk.replace(/<\/(td|div|span|b|strong)>/gi, '$& '));
     const size = parseSize(text);
 
-    // Seederji / leecherji: izrecne oznake, sicer zadnji dve celi števili po velikosti.
+    // Seederji / leecherji.
+    // Infire.si označuje ti dve števili nedvoumno z razredoma `tx-success` (seederji,
+    // zeleno) in `tx-danger` (leecherji, rdeče) na <span> znotraj stolpcev S/L - to je
+    // zanesljivo, ker vrstica lahko vsebuje ŠE druga gola števila (datum dodajanja,
+    // komentarji, "zgodovina torrenta" povezava na koncu vrstice), ki stara "zadnji dve
+    // števili v vrstici" hevristika napačno zamenja za (seeders, leechers), če je teh
+    // dodatnih števil med velikostjo in pravim S/L stolpcem oz. za njim.
     let seeders = null;
     let leechers = null;
-    const sm = /(?:seeders?|seeds?|se[ée]d)\s*[:=]?\s*(\d+)/i.exec(text);
-    const lm = /(?:leechers?|leech|peers?)\s*[:=]?\s*(\d+)/i.exec(text);
-    if (sm) seeders = parseInt(sm[1], 10);
-    if (lm) leechers = parseInt(lm[1], 10);
-    if (seeders === null) {
+    const successM = /tx-success["'][^>]*>\s*(\d{1,7})\s*</i.exec(chunk);
+    const dangerM = /tx-danger["'][^>]*>\s*(\d{1,7})\s*</i.exec(chunk);
+    if (successM) seeders = parseInt(successM[1], 10);
+    if (dangerM) leechers = parseInt(dangerM[1], 10);
+
+    if (seeders === null || leechers === null) {
+      const sm = /(?:seeders?|seeds?|se[ée]d)\s*[:=]?\s*(\d+)/i.exec(text);
+      const lm = /(?:leechers?|leech)\s*[:=]?\s*(\d+)/i.exec(text);
+      if (seeders === null && sm) seeders = parseInt(sm[1], 10);
+      if (leechers === null && lm) leechers = parseInt(lm[1], 10);
+    }
+    if (seeders === null || leechers === null) {
+      // Zadnja možnost, če postavitev strani ne ustreza zgornjemu: vzemi prvi dve celi
+      // števili TAKOJ za velikostjo (stolpca S in L si na infire.si sledita neposredno
+      // za velikostjo), ne zadnji dve v vrstici - s tem se izognemo poznejšim številom
+      // iz datuma/komentarjev/zgodovine, ki pridejo za S/L stolpcema.
       const sizeAt = SIZE_RE.exec(chunk);
       const after = sizeAt ? chunk.slice(sizeAt.index + sizeAt[0].length) : chunk;
-      const nums = [...after.matchAll(/>\s*(\d{1,6})\s*</g)].map((x) => parseInt(x[1], 10));
-      if (nums.length >= 2) {
-        seeders = nums[nums.length - 2];
-        leechers = nums[nums.length - 1];
-      } else if (nums.length === 1) {
-        seeders = nums[0];
-      }
+      const nums = [...after.matchAll(/>\s*(\d{1,7})\s*</g)].map((x) => parseInt(x[1], 10));
+      if (seeders === null && nums.length >= 1) seeders = nums[0];
+      if (leechers === null && nums.length >= 2) leechers = nums[1];
     }
 
     const dl = /href=["']([^"']*download\.php[^"']*)["']/i.exec(chunk);
